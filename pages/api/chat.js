@@ -1,63 +1,39 @@
-// /api/chat.js
-import { Readable } from 'stream';
+import { Readable } from "stream";
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
-  const { message } = req.body;
-  const assistant_id = 'asst_8Iw8xHDNqFYSLva0KmRChr4C';
+  const { messages } = req.body;
 
   try {
-    // Step 1: Create thread
-    const threadRes = await fetch('https://api.openai.com/v1/threads', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'assistants=v1'
-      }
-    });
-    const { id: thread_id } = await threadRes.json();
-
-    // Step 2: Add message to thread
-    await fetch(`https://api.openai.com/v1/threads/${thread_id}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'assistants=v1'
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ role: 'user', content: message })
+      body: JSON.stringify({
+        model: "gpt-4o",
+        stream: true,
+        messages,
+      }),
     });
 
-    // Step 3: Run assistant
-    const runRes = await fetch(`https://api.openai.com/v1/threads/${thread_id}/runs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'assistants=v1'
-      },
-      body: JSON.stringify({ assistant_id, stream: true })
-    });
-
-    if (!runRes.ok) {
-      const error = await runRes.text();
-      throw new Error(`Run failed: ${error}`);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI error: ${error}`);
     }
 
-    // Step 4: Stream response back
-    const nodeStream = Readable.fromWeb(runRes.body);
-    res.setHeader('Content-Type', 'text/event-stream');
-    nodeStream.pipe(res);
-
+    const stream = Readable.fromWeb(response.body);
+    res.setHeader("Content-Type", "text/event-stream");
+    stream.pipe(res);
   } catch (err) {
-    console.error('Assistant API error:', err);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error("OpenAI stream error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 }
