@@ -1,16 +1,12 @@
+import { Readable } from "stream";
+
 export default async function handler(req, res) {
-  // CORS headers to allow local dev + Framer
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
   const { messages } = req.body;
 
@@ -28,23 +24,16 @@ export default async function handler(req, res) {
       }),
     });
 
-    // 👇 FIX IS HERE
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error("No stream returned from OpenAI");
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(decoder.decode(value));
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI error: ${error}`);
     }
 
-    res.end();
+    // ✅ FIXED: Convert web stream to Node.js stream
+    const nodeStream = Readable.fromWeb(response.body);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    nodeStream.pipe(res);
   } catch (err) {
     console.error("OpenAI stream error:", err);
     res.status(500).json({ error: "Internal Server Error" });
