@@ -5,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-export const runtime = 'edge'; // Required for streaming on Vercel Edge
+export const runtime = 'edge'; // Required on Vercel
 
 export async function POST(req: Request) {
   const { input } = await req.json();
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     messages: [
       {
         role: 'system',
-        content: 'You are a friendly EV assistant. Keep it playful and helpful.'
+        content: 'You are a friendly VINder AI assistant who helps match people to the perfect EV. Keep it smart, playful, and fun.'
       },
       {
         role: 'user',
@@ -25,19 +25,22 @@ export async function POST(req: Request) {
     ]
   });
 
-  // Pipe OpenAI stream into a generic StreamingTextResponse
+  // Format the OpenAI stream for your frontend
   const stream = OpenAIStream(response, {
     onToken(token) {
-      // Format each token as a streaming chunk
-      const formatted = {
+      return `data: ${JSON.stringify({
         delta: {
           content: [{ text: { value: token } }]
         }
-      };
-      // Stream-friendly JSON payload
-      return `data: ${JSON.stringify(formatted)}\n\n`;
+      })}\n\n`;
     }
   });
 
-  return new StreamingTextResponse(stream);
+  return new StreamingTextResponse(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    }
+  });
 }
